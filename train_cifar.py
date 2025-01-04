@@ -231,6 +231,7 @@ def main(args):
             name=run_name,
             config=config,
             tags=["pretrain", args.dataset],
+            dir="/scratch/nia4240/compute-better_spent-scratch/wandb",
         )
 
     compute_per_epoch = info['cola_flops'] * len(train_loader) * args.batch_size

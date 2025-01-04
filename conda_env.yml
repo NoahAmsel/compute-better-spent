@@ -1,4 +1,4 @@
-name: struct
+name: struct_orig
 channels:
   - conda-forge
   - defaults
