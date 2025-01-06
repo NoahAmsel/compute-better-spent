@@ -2,8 +2,7 @@ ds=cifar100
 lr=1e-3
 depth=3
 width=64
-struct=dense
-for scale_factor in 1; do  # 0.5 1 2 4 6 8 10 12
+for scale_factor in 2; do  # 0.5 1 2 4 6 8 10 12
 python3 train_cifar.py \
 --wandb_project=struct_sequence_mixing \
 --dataset=${ds} \
@@ -19,6 +18,6 @@ python3 train_cifar.py \
 --patch_size=8 \
 --optimizer=adamw \
 --scale_factor=${scale_factor} \
---struct=${struct} \
+--alt_attn_config="QK=LowRankQK(heads, dim, dim//heads);VO=LowRankVO(heads, dim, dim//heads)" \
 --scheduler=cosine
 done;

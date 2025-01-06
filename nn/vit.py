@@ -5,6 +5,7 @@ from torch import nn
 import torch.nn.functional as F
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
+from .alt_attn import *
 from .cola_nn import dense_init
 
 class CappedList():
@@ -100,7 +101,7 @@ class Attention(nn.Module):
 
 class Transformer(nn.Module):
     def __init__(self, dim, depth, heads, dim_head, mlp_dim, dropout=0., fixup=False, attn_mult=1,
-                 use_bias=True, causal=False, last_layernorm=True):
+                 use_bias=True, causal=False, last_layernorm=True, alt_attn_config=None):
         super().__init__()
         self.norm = nn.LayerNorm(dim) if last_layernorm else nn.Identity()
         self.layers = nn.ModuleList([])
@@ -108,8 +109,13 @@ class Transformer(nn.Module):
         self.attn_mult = attn_mult
         for _ in range(depth):
             ffn = FeedForward(dim, mlp_dim, dropout=dropout, fixup=fixup, use_bias=use_bias)
-            attn = Attention(dim, heads=heads, dim_head=dim_head, dropout=dropout, fixup=fixup, attn_mult=attn_mult,
-                             use_bias=use_bias, causal=causal)
+            if alt_attn_config is None:
+                attn = Attention(dim, heads=heads, dim_head=dim_head, dropout=dropout, fixup=fixup, attn_mult=attn_mult,
+                                use_bias=use_bias, causal=causal)
+            else:
+                assert dim_head == None, 'dim_head must be None when using alt_attn_config'
+                exec("global QK, VO;" + alt_attn_config)  # should set QK and VO
+                attn = StructuredAttention(dim, QK=QK, VO=VO, dropout=dropout, fixup=fixup, causal=causal)
             self.layers.append(nn.ModuleList([attn, ffn]))
         self.hs = [CappedList() for _ in range(depth + 2)]
 
@@ -133,7 +139,7 @@ class ViT(nn.Module):
         self.emb_mult = emb_mult
         self.attn_mult = attn_mult
         self.output_mult = output_mult
-        if dim_head is None:
+        if (dim_head is None) and (kwargs.get("alt_attn_config", None) is None):
             dim_head = width / heads
             assert int(dim_head) == dim_head, 'dimension of each head must be integer'
             dim_head = int(dim_head)
@@ -162,7 +168,7 @@ class ViT(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
         self.transformer = Transformer(width, depth, heads, dim_head, mlp_dim, dropout, fixup, attn_mult,
-                                       use_bias)
+                                    use_bias, alt_attn_config=kwargs.get("alt_attn_config", None))
 
         self.pool = pool
         self.to_latent = nn.Identity()

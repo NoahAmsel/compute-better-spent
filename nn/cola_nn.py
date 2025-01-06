@@ -372,10 +372,11 @@ def cola_parameterize(model_builder, base_config, lr, target_config=None, struct
     model = deferred_init(model_builder, **target_config)
     lr_mults = append_lr_mults_to_params(model, base_param_shapes=base_param_shapes)
     if struct != 'none':
-        replace_layers_with_cola_layers(model, struct, cola_kwargs, layer_select_fn, zero_init_fn, use_wrong_mult, init_method)
-    materialize_model(model, lr_mults)
+        assert False, f"struct should be 'none', not {struct}"
+        # replace_layers_with_cola_layers(model, struct, cola_kwargs, layer_select_fn, zero_init_fn, use_wrong_mult, init_method)
+    materialize_model(model, lr_mults)  # this calls model_builder and attaches the lr_mults computed in the previous line
     model.to(device)
-    optimizer = adjust_lr_and_create_optimizer(model.named_parameters(), lr, extra_lr_mult_fn, optim_kwargs)
+    optimizer = adjust_lr_and_create_optimizer(model.named_parameters(), lr, extra_lr_mult_fn, optim_kwargs)  # as written now, this won't adjust again, it will just apply the learning rates computed by append_lr_mults_to_params using the provided .fan_in
     return model, optimizer
 
 
@@ -389,11 +390,11 @@ def append_lr_mults_to_params(model, base_param_shapes):
     assert len(base_param_shapes) == len(param_shapes), 'Base model and target model have different number of param tensors'
     lr_mults = {}
     for base_shape, name, shape, p in zip(base_param_shapes, param_names, param_shapes, params):
-        if base_shape == shape:
+        if base_shape == shape:  # if the model hasn't been scaled up at all relative to the small model, then everything is the same
             mult = 1
         else:
             # special cases, e.g. word embeddings, positional embeddings
-            if hasattr(p, 'fan_in_dims'):
+            if hasattr(p, 'fan_in_dims'):  # for my use case, if this is correct then i'm good
                 fan_in_dims = p.fan_in_dims
                 d_in_base = base_shape[fan_in_dims]
                 d_in = shape[fan_in_dims]
@@ -444,7 +445,8 @@ def replace_layers_with_cola_layers(model, struct, cola_kwargs, layer_select_fn,
             if zero_init:
                 print(f'Zero init: {name}')
             assert hasattr(module.weight, 'lr_mult'), 'Weights in linear layer must have lr_mult attribute'
-            dense_lr_mult = module.weight.lr_mult
+            dense_lr_mult = module.weight.lr_mult  # this lr_mult was the multiplier you need for muP, assuming it's a dense layer
+            # everything after here is applying additional corrections if you're replacing dense by structured
 
             learn_gamma = True
             if 'do_qk_ln' in cola_kwargs and cola_kwargs['do_qk_ln']:
@@ -471,6 +473,7 @@ def replace_layers_with_cola_layers(model, struct, cola_kwargs, layer_select_fn,
                     if p.dim() == 0:
                         p.lr_mult = 1  # scalar have O(1) lr
                     else:
+                        # Shikai says: this corrects for the structure.
                         p.lr_mult = p.lr_mult * dense_lr_mult  # final cola mult = cola mult * dense mult
             # Split the name to get parent module and attribute name
             name_split = name.rsplit('.', 1)
@@ -501,7 +504,7 @@ def adjust_lr_and_create_optimizer(named_parameters, lr, extra_lr_mult_fn, optim
         if hasattr(param, 'override_lr'):
             param.lr_mult = param.override_lr / lr
         assert hasattr(param, 'lr_mult'), f'lr_mult not found for {name}'
-        mult = param.lr_mult
+        mult = param.lr_mult  # look up the lr_mult 
         extra_mult = extra_lr_mult_fn(name)
         if extra_mult != 1:
             print(f'{name}: {extra_mult} * {mult}')
@@ -525,6 +528,8 @@ def adjust_lr_and_create_optimizer(named_parameters, lr, extra_lr_mult_fn, optim
         if "fused" in extra_args.keys():
             extra_args.pop("fused")
         optimizer = SGD(param_groups, **optim_kwargs, **extra_args)
+    elif opt_name == "AdamWScheduleFree":
+        raise NotImplementedError("AdamWScheduleFree is not implemented yet")
     else:
         optimizer = Adam(param_groups, **optim_kwargs, **extra_args)
     return optimizer

@@ -132,7 +132,8 @@ def main(args):
     base_config = dict(dim_in=prod(input_shape), dim_out=args.num_classes, depth=args.depth, width=args.width,
                        num_ffn_experts=args.num_ffn_experts, ffn_expansion=base_ffn_expansion, patch_size=args.patch_size,
                        in_channels=args.in_channels, shuffle_pixels=args.shuffle_pixels, heads=args.heads, dim_head=args.dim_head,
-                       attn_mult=args.attn_mult, output_mult=args.output_mult, emb_mult=args.emb_mult, layer_norm=args.layer_norm)
+                       attn_mult=args.attn_mult, output_mult=args.output_mult, emb_mult=args.emb_mult, layer_norm=args.layer_norm,
+                       alt_attn_config=args.alt_attn_config)
     # target config
     target_config = base_config.copy()
     args.width = int(args.width * args.scale_factor)  # we update args.width to have it logged in wandb

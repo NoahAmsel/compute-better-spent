@@ -39,6 +39,7 @@ def get_training_parser():
     parser.add_argument("--layer_norm", default=True, type=bool)
     parser.add_argument("--expr", type=str, default="")
     parser.add_argument("--init_type", type=str, default="bmm0")
+    parser.add_argument("--alt_attn_config", type=str, default=None)
 
     # CoLA
     parser.add_argument("--cores_n", type=int, default=2)
