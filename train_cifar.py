@@ -198,7 +198,7 @@ def main(args):
     loss_fn = CrossEntropyLoss(label_smoothing=args.smooth)
 
     # Create unique identifier
-    run_name = config_to_name(args)
+    run_name = config_to_name(args) if (args.run_name) is None else args.run_name
     path = os.path.join(args.checkpoint_folder, run_name)
 
     # Create folder to store the checkpoints
@@ -232,7 +232,7 @@ def main(args):
             name=run_name,
             config=config,
             tags=["pretrain", args.dataset],
-            dir="/scratch/nia4240/compute-better_spent-scratch/wandb",
+            dir="/scratch/nia4240/compute-better_spent-scratch/",
         )
 
     compute_per_epoch = info['cola_flops'] * len(train_loader) * args.batch_size

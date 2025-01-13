@@ -88,6 +88,7 @@ def get_training_parser():
     parser.add_argument("--wandb", default=True, action=argparse.BooleanOptionalAction, help="Whether to log with wandb")
     parser.add_argument("--wandb_project", default="struct_mlp", type=str, help="Wandb project name")
     parser.add_argument("--wandb_entity", default=None, type=str, help="Wandb entity name")
+    parser.add_argument("--run_name", default=None, type=str, help="Wandb entity name")
 
     return parser
 

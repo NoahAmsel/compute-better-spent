@@ -42,7 +42,7 @@ class FeedForward(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, dim, heads=8, dim_head=64, dropout=0., fixup=False, attn_mult=1, use_bias=True, causal=False):
+    def __init__(self, dim, heads=8, dim_head=64, dropout=0., fixup=False, attn_mult=1, use_bias=True, causal=False, qknorm=True):
         super().__init__()
         self.causal = causal
         inner_dim = dim_head * heads
@@ -60,8 +60,8 @@ class Attention(nn.Module):
         self.to_q = nn.Linear(dim, inner_dim, bias=False)
         self.to_k = nn.Linear(dim, inner_dim, bias=False)
         self.to_v = nn.Linear(dim, inner_dim, bias=False)
-        self.q_norm = nn.LayerNorm(dim_head)
-        self.k_norm = nn.LayerNorm(dim_head)
+        self.q_norm = nn.LayerNorm(dim_head) if qknorm else None
+        self.k_norm = nn.LayerNorm(dim_head) if qknorm else None
 
         self.to_out = nn.Sequential(nn.Linear(inner_dim, dim, bias=use_bias),
                                     nn.Dropout(dropout)) if project_out else nn.Identity()
@@ -79,8 +79,8 @@ class Attention(nn.Module):
 
         qkv = (self.to_q(x), self.to_k(x), self.to_v(x))
         q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> b h n d', h=self.heads), qkv)
-        q = self.q_norm(q)
-        k = self.k_norm(k)
+        if self.q_norm is not None: q = self.q_norm(q)
+        if self.k_norm is not None: k = self.k_norm(k)
         dots = torch.matmul(q, k.transpose(-1, -2)) * self.scale  # b h n n
 
         # attention mask
@@ -109,9 +109,9 @@ class Transformer(nn.Module):
         self.attn_mult = attn_mult
         for _ in range(depth):
             ffn = FeedForward(dim, mlp_dim, dropout=dropout, fixup=fixup, use_bias=use_bias)
-            if alt_attn_config is None:
+            if ((alt_attn_config is None) or (alt_attn_config == "none")):
                 attn = Attention(dim, heads=heads, dim_head=dim_head, dropout=dropout, fixup=fixup, attn_mult=attn_mult,
-                                use_bias=use_bias, causal=causal)
+                                use_bias=use_bias, causal=causal, qknorm=True)  # TODO: could add config for qknorm
             else:
                 assert dim_head == None, 'dim_head must be None when using alt_attn_config'
                 exec("global QK, VO;" + alt_attn_config)  # should set QK and VO
@@ -139,7 +139,7 @@ class ViT(nn.Module):
         self.emb_mult = emb_mult
         self.attn_mult = attn_mult
         self.output_mult = output_mult
-        if (dim_head is None) and (kwargs.get("alt_attn_config", None) is None):
+        if (dim_head is None) and ((kwargs.get("alt_attn_config", None) is None) or (kwargs.get("alt_attn_config", None) == "none")):
             dim_head = width / heads
             assert int(dim_head) == dim_head, 'dimension of each head must be integer'
             dim_head = int(dim_head)
