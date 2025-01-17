@@ -517,7 +517,7 @@ def adjust_lr_and_create_optimizer(named_parameters, lr, extra_lr_mult_fn, optim
             print(f'No wd for {name}')
             adjusted_wd = 0.0
         adjusted_lr = lr * mult
-        param_groups.append({'params': param, 'lr': adjusted_lr, 'weight_decay': adjusted_wd})
+        param_groups.append({'name': name, 'params': param, 'lr': adjusted_lr, 'weight_decay': adjusted_wd})
     fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters
     use_fused = fused_available and device_type == 'cuda'
     extra_args = dict(fused=True) if use_fused else dict()
