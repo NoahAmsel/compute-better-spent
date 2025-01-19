@@ -119,7 +119,7 @@ class Transformer(nn.Module):
                 attn = StructuredAttention(dim, QK=QK, VO=VO, dropout=dropout, fixup=fixup, causal=causal)
             elif alt_attn_config[:4] == "BBTT":
                 _, btt_tt_dim, btt_tt_rank, bilinear_btt_muP_attn_logits_scaling = alt_attn_config.split(",")
-                attn = BilinearBTTAttention(dim, heads, dim_head, int(btt_tt_dim), int(btt_tt_rank), eval(bilinear_btt_muP_attn_logits_scaling), dropout, use_bias)
+                attn = BilinearBTTAttention(dim, heads, dim_head, int(btt_tt_dim), int(btt_tt_rank), eval(bilinear_btt_muP_attn_logits_scaling), True, dropout, use_bias)
             else:
                 raise NotImplementedError(f"{alt_attn_config} not an attn type")
             self.layers.append(nn.ModuleList([attn, ffn]))
@@ -145,7 +145,7 @@ class ViT(nn.Module):
         self.emb_mult = emb_mult
         self.attn_mult = attn_mult
         self.output_mult = output_mult
-        if (dim_head is None) and (kwargs.get("alt_attn_config", "")[:3] != "QK="):
+        if (dim_head is None) and ((kwargs.get("alt_attn_config") is None) or (kwargs.get("alt_attn_config", "")[:3] != "QK=")):
             dim_head = width / heads
             assert int(dim_head) == dim_head, 'dimension of each head must be integer'
             dim_head = int(dim_head)

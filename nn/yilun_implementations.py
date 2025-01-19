@@ -15,7 +15,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-from sympy import factorint
+from sympy import factorint, divisors
 from einops import rearrange
 
 from .cola_nn import cola_init
@@ -69,7 +69,7 @@ class BilinearBTT_W_Q_Projection(nn.Module):
 
 class BilinearBTTAttention(nn.Module):
 
-    def __init__(self, dim, heads, dim_head, btt_tt_dim, btt_tt_rank, bilinear_btt_muP_attn_logits_scaling, dropout=0., use_bias=True):
+    def __init__(self, dim, heads, dim_head, btt_tt_dim, btt_tt_rank, bilinear_btt_muP_attn_logits_scaling, bilinearBTT_use_extra_LN_on_X, dropout=0., use_bias=True):
         super().__init__()
         assert dim % heads == 0
         assert dim == dim_head * heads
@@ -83,6 +83,7 @@ class BilinearBTTAttention(nn.Module):
         self.link_function = "softmax"
 
         self.bilinear_btt_muP_attn_logits_scaling = bilinear_btt_muP_attn_logits_scaling
+        self.bilinearBTT_use_extra_LN_on_X = bilinearBTT_use_extra_LN_on_X
 
         self.n_head = heads
         self.d_model = dim
@@ -102,7 +103,9 @@ class BilinearBTTAttention(nn.Module):
 
         if self.do_qk_ln:
             self.bilinear_btt_ln_PLPRXT = nn.LayerNorm(dim)
-
+        if self.bilinearBTT_use_extra_LN_on_X:
+            self.bilinear_btt_ln_X = nn.LayerNorm(self.d_model, bias=use_bias)
+        
         # W_V, W_O Projections
         self.c_attn_v = nn.Linear(dim, dim, bias=use_bias)
         self.c_attn_v.weight.d_in = dim
@@ -124,6 +127,10 @@ class BilinearBTTAttention(nn.Module):
         #                             .view(1, 1, config.block_size, config.block_size))
 
     def factorize(self, x, n=2):
+        if n == 2:
+            bigger = next(factor for factor in divisors(x) if factor > math.sqrt(x))
+            return [x//bigger, bigger]
+
         # Get prime factors and their counts
         prime_factors = factorint(x)
 
@@ -131,7 +138,7 @@ class BilinearBTTAttention(nn.Module):
         numbers = [1] * n
 
         # Distribute the prime factors
-        for prime, count in prime_factors.items():
+        for prime, count in reversed(list(prime_factors.items())):
             for _ in range(count):
                 # Find the number with the smallest product to assign the prime factor
                 min_index = min(range(n), key=lambda i: numbers[i])
@@ -142,6 +149,7 @@ class BilinearBTTAttention(nn.Module):
 
     def bilinear_btt_einsum(self, x):        
         '''
+        This script is mainly for reference purposes! It's not for forward pass.
         (Pdb) !torch.sum(att_einsum!=att)
         '''
         B, T, C = x.size()
@@ -175,6 +183,9 @@ class BilinearBTTAttention(nn.Module):
         return att_einsum
 
     def forward(self, x, verify=False):
+        if self.bilinearBTT_use_extra_LN_on_X:
+            x = self.bilinear_btt_ln_X(x)
+
         B, T, C = x.size()
 
         # compute v_projection
@@ -224,7 +235,7 @@ class BilinearBTTAttention(nn.Module):
         elif self.link_function == "identity":
             att = att.masked_fill(self.bias[:, :, :T, :T] == 0, 0)
         else:
-            raise ValueError 
+            raise ValueError
         
         att = self.attn_dropout(att)
         y = att @ v
